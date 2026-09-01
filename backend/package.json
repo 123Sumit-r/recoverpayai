@@ -1,0 +1,26 @@
+{
+  "name": "recover-ai-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RecoverPay AI - Payment Recovery Platform Backend",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "db:create": "node scripts/createDatabase.js",
+    "db:schema": "node scripts/setupDatabase.js",
+    "db:seed": "echo 'DEPRECATED: Demo seeding is disabled. Use the dashboard to create real data.' && exit 1",
+    "db:clean-demo": "node scripts/removeDemoData.js",
+    "db:setup": "npm run db:create && npm run db:schema"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "resend": "^6.25.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "recover-pay-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RecoverPay AI - AI-Powered Payment Recovery Platform",
+  "scripts": {
+    "backend": "npm --prefix backend run dev",
+    "frontend": "npm --prefix frontend run dev",
+    "backend:start": "npm --prefix backend start",
+    "frontend:build": "npm --prefix frontend run build"
+  }
+}
