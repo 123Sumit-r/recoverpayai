@@ -443,7 +443,7 @@ export default function App() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <span className="font-semibold text-base text-gray-900">Revenue Recover AI</span>
+              <span className="font-semibold text-base text-gray-900">RecoverPay AI</span>
               <span className="hidden sm:inline px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200 rounded">
                 v1.0
               </span>
