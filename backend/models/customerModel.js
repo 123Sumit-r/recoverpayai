@@ -16,12 +16,13 @@ async function findByEmail(email) {
 }
 
 async function create({ name, email, phone, customer_type = 'individual' }) {
+  if (!phone || !String(phone).trim()) throw new Error('Customer phone is required');
   const result = await pool.query(
     `INSERT INTO customers (name, email, phone, customer_type)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone
      RETURNING *`,
-    [name, email, phone || '9999999999', customer_type]
+    [name, email, phone.trim(), customer_type]
   );
   return result.rows[0];
 }

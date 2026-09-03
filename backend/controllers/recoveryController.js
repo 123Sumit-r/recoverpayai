@@ -13,6 +13,16 @@ async function getCases(request, response, next) {
   try { response.json({ success: true, data: await recoveryModel.findAll() }); } catch (error) { next(error); }
 }
 
+async function getRevenuePerformance(request, response, next) {
+  try {
+    response.json({ success: true, data: await recoveryModel.getRevenuePerformance(), baselineRecoveredRevenue: null });
+  } catch (error) { next(error); }
+}
+
+async function getAuditLedger(request, response, next) {
+  try { response.json({ success: true, data: await recoveryModel.getAuditLedger() }); } catch (error) { next(error); }
+}
+
 async function getCase(request, response, next) {
   const id = parseId(request.params.caseId);
   if (!id) return response.status(400).json({ success: false, message: 'Invalid recovery case ID' });
@@ -84,6 +94,11 @@ async function executeCase(request, response, next) {
     if (!recoveryCase) return response.status(404).json({ success: false, message: 'Recovery case not found' });
     const diagnosis = recoveryCase.ai_analysis ? { root_cause: recoveryCase.ai_analysis.root_cause, diagnosis: recoveryCase.diagnosis } : diagnose(recoveryCase);
     const recommendation = recoveryCase.ai_analysis ? { recommended_action: recoveryCase.ai_analysis.recommended_action, reason: recoveryCase.ai_analysis.reason } : recommend(recoveryCase, diagnosis);
+    if (request.body?.action === 'stop_recovery') {
+      const stoppedCase = await recoveryModel.updateStatus(id, 'closed', 0, 'stop_recovery', 'manually_stopped');
+      return response.json({ success: true, data: { case_id: id, action: 'stop_recovery', status: 'closed', mode: 'manual', simulated: false, recovery_case: stoppedCase } });
+    }
+    if (request.body?.action) recommendation.recommended_action = request.body.action;
     if (recoveryCase.ai_analysis) validateAnalysis(recoveryCase.ai_analysis);
     const policy = evaluate(recoveryCase, recommendation.recommended_action);
 
@@ -130,4 +145,5 @@ async function getRecoverySummary(request, response, next) {
 }
 
 module.exports = { getCases, getCase, createCase, analyzeCase, aiAnalyzeCase, executeCase, getRecoverySummary };
+module.exports = { getCases, getCase, createCase, analyzeCase, aiAnalyzeCase, executeCase, getRecoverySummary, getRevenuePerformance, getAuditLedger };
 

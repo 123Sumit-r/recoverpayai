@@ -143,6 +143,45 @@ async function execute(caseRecord, policy, result) {
   }
 }
 
+async function getRevenuePerformance() {
+  const result = await pool.query(`
+    WITH transaction_recovery AS (
+      SELECT transaction_id, LEAST(SUM(amount_recovered), MAX(amount_at_risk)) AS recovered_revenue
+      FROM recovery_cases
+      WHERE transaction_id IS NOT NULL AND status = 'recovered'
+      GROUP BY transaction_id
+    )
+    SELECT
+      TO_CHAR(t.created_at::date, 'YYYY-MM-DD') AS date,
+      COALESCE(SUM(t.amount), 0) AS revenue_at_risk,
+      COALESCE(SUM(CASE WHEN tr.recovered_revenue > 0 THEN LEAST(tr.recovered_revenue, t.amount) ELSE 0 END), 0) AS recovered_revenue
+    FROM transactions t
+    LEFT JOIN transaction_recovery tr ON tr.transaction_id = t.id
+    WHERE t.status = 'failed'
+    GROUP BY t.created_at::date
+    ORDER BY t.created_at::date
+  `);
+
+  return result.rows.map((row) => ({
+    date: row.date,
+    revenueAtRisk: Number(row.revenue_at_risk),
+    recoveredRevenue: Number(row.recovered_revenue)
+  }));
+}
+
+async function getAuditLedger() {
+  const result = await pool.query(`
+    SELECT al.id, al.recovery_case_id AS case_id, al.event_type, al.message, al.created_at,
+      rc.amount_at_risk, c.name AS customer_name
+    FROM audit_logs al
+    JOIN recovery_cases rc ON rc.id = al.recovery_case_id
+    JOIN customers c ON c.id = rc.customer_id
+    ORDER BY al.created_at DESC, al.id DESC
+    LIMIT 500
+  `);
+  return result.rows.map((row) => ({ ...row, amount_at_risk: Number(row.amount_at_risk) }));
+}
+
 async function getSummary() {
   const result = await pool.query(`
     SELECT
@@ -318,6 +357,8 @@ module.exports = {
   updateRazorpayPaymentDetails,
   blockRetry,
   getSummary,
+  getRevenuePerformance,
+  getAuditLedger,
   getAuditLogs,
   getEmailAuditLogs
 };

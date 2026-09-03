@@ -53,20 +53,17 @@ function mapFailureReason(razorpayError, paymentMethod = 'card') {
     return { reason: 'temporary_failure', description: 'Payment gateway error' };
   }
 
-  const errorLower = razorpayError.toLowerCase();
+  const errorLower = String(razorpayError).toLowerCase();
 
-  // Card expired
-  if (
-    errorLower.includes('card expired') ||
-    errorLower.includes('expired') ||
-    errorLower.includes('exp')
-  ) {
+  // Prefer Razorpay's machine-readable reason when it is provided.
+  if (['card_expired', 'expired_card'].includes(errorLower) || errorLower.includes('expired')) {
     return {
       reason: 'expired_card',
       description: 'Payment method has expired'
     };
   }
 
+  // Card expired
   // Insufficient funds
   if (
     errorLower.includes('insufficient') ||
@@ -182,8 +179,8 @@ function parsePaymentWebhook(eventData) {
     currency: payment.currency || 'INR',
     status: payment.status,
     method: payment.method,
-    error: payment.error_description || payment.error_reason || null,
-    failureReason: payment.error_description || payment.error_reason || null,
+      error: payment.error_description || payment.error_reason || null,
+      failureReason: payment.error_reason || payment.error_description || null,
     email: payment.email,
     contact: payment.contact,
     description: payment.description,

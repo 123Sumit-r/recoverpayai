@@ -1,5 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import RevenueRecoveryChart from './components/RevenueRecoveryChart';
+import TransactionExplorer from './components/TransactionExplorer';
+import RecoveryCases, { RecoveryCaseDetail } from './components/RecoveryCases';
+import AgentActivity from './components/AgentActivity';
+import HumanReview from './components/HumanReview';
+import AuditLedger from './components/AuditLedger';
+import DemoSimulator from './components/DemoSimulator';
+import RevenueRisk from './components/RevenueRisk';
+import MeasuredRecovery from './components/MeasuredRecovery';
+import SystemArchitecture from './components/SystemArchitecture';
+import AgentConfiguration from './components/AgentConfiguration';
+import PoliciesSafety from './components/PoliciesSafety';
+import SettingsRazorpay from './components/SettingsRazorpay';
+import Sidebar from './components/Sidebar';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
@@ -89,13 +104,17 @@ function getRiskBadge(level) {
   }
 }
 
-export default function App() {
+function DashboardPage({ defaultTab = 'overview' }) {
   const [risk, setRisk] = useState(null);
   const [summary, setSummary] = useState(null);
   const [failedTransactions, setFailedTransactions] = useState([]);
   const [abandonedCheckouts, setAbandonedCheckouts] = useState([]);
   const [overdueInvoices, setOverdueInvoices] = useState([]);
   const [cases, setCases] = useState([]);
+  const [revenuePerformance, setRevenuePerformance] = useState([]);
+  const [revenuePerformanceLoading, setRevenuePerformanceLoading] = useState(true);
+  const [revenuePerformanceError, setRevenuePerformanceError] = useState('');
+  const [baselineRecoveredRevenue, setBaselineRecoveredRevenue] = useState(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -103,7 +122,7 @@ export default function App() {
   const [analyzingCheckoutId, setAnalyzingCheckoutId] = useState(null);
   const [analyzingInvoiceId, setAnalyzingInvoiceId] = useState(null);
   const [executingCaseId, setExecutingCaseId] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'queue' | 'invoices' | 'payments' | 'checkouts'
+  const [activeTab, setActiveTab] = useState(defaultTab); // 'overview' | 'queue' | 'invoices' | 'payments' | 'checkouts'
   const [selectedCase, setSelectedCase] = useState(null);
   const [caseAuditLogs, setCaseAuditLogs] = useState([]);
   const [caseEmailLogs, setCaseEmailLogs] = useState([]);
@@ -117,6 +136,7 @@ export default function App() {
   const [formData, setFormData] = useState({
     customer_name: '',
     customer_email: '',
+    customer_phone: '',
     amount: '',
     failure_reason: 'insufficient_funds',
     due_date: new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10),
@@ -127,17 +147,30 @@ export default function App() {
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
 
+  useEffect(() => setActiveTab(defaultTab), [defaultTab]);
+
+  const chartRevenueAtRisk = revenuePerformance.reduce((total, item) => total + Number(item.revenueAtRisk || 0), 0);
+  const chartRecoveredRevenue = revenuePerformance.reduce((total, item) => total + Number(item.recoveredRevenue || 0), 0);
+  const chartRecoveryRate = chartRevenueAtRisk ? (chartRecoveredRevenue / chartRevenueAtRisk) * 100 : 0;
+  const policyGatedAmount = cases.reduce((total, item) => total + (item.policy_allowed ? Number(item.amount_at_risk || 0) : 0), 0);
+  const pendingActionsAmount = cases.reduce((total, item) => total + (['open', 'processing', 'email_sent'].includes(item.status) ? Number(item.amount_at_risk || 0) : 0), 0);
+  const escalatedAmount = cases.reduce((total, item) => total + (item.status === 'escalated' ? Number(item.amount_at_risk || 0) : 0), 0);
+  const stoppedAmount = cases.reduce((total, item) => total + (item.status === 'failed' ? Number(item.amount_at_risk || 0) : 0), 0);
+
   async function refresh() {
     setLoading(true);
+    setRevenuePerformanceLoading(true);
+    setRevenuePerformanceError('');
     try {
-      const [riskResponse, summaryResponse, transactionResponse, checkoutResponse, invoiceResponse, caseResponse] =
+      const [riskResponse, summaryResponse, transactionResponse, checkoutResponse, invoiceResponse, caseResponse, performanceResponse] =
         await Promise.all([
           api.get('/risk/summary'),
           api.get('/recovery/summary'),
           api.get('/transactions/failed'),
           api.get('/checkouts/abandoned'),
           api.get('/invoices/overdue'),
-          api.get('/recovery/cases')
+          api.get('/recovery/cases'),
+          api.get('/recovery/revenue-performance')
         ]);
       setRisk(riskResponse.data.data);
       setSummary(summaryResponse.data.data);
@@ -145,6 +178,8 @@ export default function App() {
       setAbandonedCheckouts(checkoutResponse.data.data || []);
       setOverdueInvoices(invoiceResponse.data.data || []);
       setCases(caseResponse.data.data || []);
+      setRevenuePerformance(performanceResponse.data.data || []);
+      setBaselineRecoveredRevenue(performanceResponse.data.baselineRecoveredRevenue ?? null);
 
       if (selectedCase) {
         const updated = (caseResponse.data.data || []).find((c) => c.id === selectedCase.id);
@@ -152,8 +187,10 @@ export default function App() {
       }
     } catch {
       setError('Could not load recovery workspace. Verify PostgreSQL and backend are running.');
+      setRevenuePerformanceError('Could not load revenue recovery performance.');
     } finally {
       setLoading(false);
+      setRevenuePerformanceLoading(false);
     }
   }
 
@@ -277,8 +314,8 @@ export default function App() {
   // Handle Real Data Ingestion
   async function handleCreateSubmit(e) {
     e.preventDefault();
-    if (!formData.customer_name || !formData.customer_email || !formData.amount) {
-      setError('Please fill in all required fields.');
+    if (!formData.customer_name || !formData.customer_email || !formData.customer_phone || !formData.amount) {
+      setError('Please fill in all required fields, including customer phone.');
       return;
     }
     setFormSubmitting(true);
@@ -291,6 +328,7 @@ export default function App() {
         const txnRes = await api.post('/transactions', {
           customer_name: formData.customer_name,
           customer_email: formData.customer_email,
+          customer_phone: formData.customer_phone,
           amount: Number(formData.amount),
           failure_reason: formData.failure_reason,
           status: 'failed'
@@ -301,6 +339,7 @@ export default function App() {
         const invRes = await api.post('/invoices', {
           customer_name: formData.customer_name,
           customer_email: formData.customer_email,
+          customer_phone: formData.customer_phone,
           amount: Number(formData.amount),
           due_date: formData.due_date,
           status: 'overdue'
@@ -311,6 +350,7 @@ export default function App() {
         const chkRes = await api.post('/checkouts', {
           customer_name: formData.customer_name,
           customer_email: formData.customer_email,
+          customer_phone: formData.customer_phone,
           amount: Number(formData.amount),
           status: 'abandoned',
           abandonment_reason: formData.abandonment_reason
@@ -342,6 +382,7 @@ export default function App() {
       setFormData({
         customer_name: '',
         customer_email: '',
+        customer_phone: '',
         amount: '',
         failure_reason: 'insufficient_funds',
         due_date: new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10),
@@ -572,11 +613,11 @@ export default function App() {
         {/* Primary KPI Metric Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Revenue At Risk</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-900">{money(risk?.total_revenue_at_risk)}</p>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Payment Revenue At Risk</p>
+            <p className="mt-2 text-2xl font-semibold text-gray-900">{money(chartRevenueAtRisk)}</p>
             <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-xs text-gray-400">
-              <span>Failed: {money(risk?.failed_payment_amount)}</span>
-              <span>Checkout: {money(risk?.checkout_abandonment_amount)}</span>
+              <span>Failed payments only</span>
+              <span>{failedTransactions.length} records</span>
             </div>
           </div>
 
@@ -592,13 +633,13 @@ export default function App() {
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Recovery Rate</p>
             <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="text-2xl font-semibold text-gray-900">{summary?.recovery_rate ?? 0}%</span>
-              <span className="text-xs text-gray-400">by case volume</span>
+              <span className="text-2xl font-semibold text-gray-900">{chartRecoveryRate.toFixed(1)}%</span>
+              <span className="text-xs text-gray-400">by recovered amount</span>
             </div>
             <div className="mt-3 w-full bg-gray-100 rounded-full h-1.5">
               <div
                 className="bg-orange-500 h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, Math.max(0, summary?.recovery_rate || 0))}%` }}
+                style={{ width: `${Math.min(100, Math.max(0, chartRecoveryRate))}%` }}
               ></div>
             </div>
           </div>
@@ -612,6 +653,27 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            ['Pending Actions', pendingActionsAmount],
+            ['Escalated to Human', escalatedAmount],
+            ['Stopped / Reached Cap', stoppedAmount],
+            ['Total Monitored', failedTransactions.length]
+          ].map(([label, value], index) => (
+            <div key={label} className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-slate-200 shadow-sm">
+              <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">{label}</p>
+              <p className={`mt-1 text-sm font-semibold ${index === 1 ? 'text-indigo-300' : index === 2 ? 'text-slate-300' : 'text-white'}`}>{index === 3 ? `${value} payments` : money(value)}</p>
+            </div>
+          ))}
+        </div>
+
+        <RevenueRecoveryChart
+          data={revenuePerformance}
+          loading={revenuePerformanceLoading}
+          error={revenuePerformanceError}
+          baselineRecoveredRevenue={baselineRecoveredRevenue}
+        />
 
         {/* AI Case Spotlight */}
         {latestAiCase && (
@@ -1131,6 +1193,19 @@ export default function App() {
                 />
               </div>
 
+              {/* Real Phone Number */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Customer Phone Number *</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="e.g. +91 98765 43210"
+                  value={formData.customer_phone}
+                  onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
+                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500"
+                />
+              </div>
+
               {/* Amount */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Amount at Risk (₹) *</label>
@@ -1478,5 +1553,60 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+function RouteShell({ title, description }) {
+  return (
+    <section className="min-h-screen bg-slate-50 p-6 text-slate-700 sm:p-10">
+      <div className="mx-auto max-w-4xl rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-600">RecoverAI workspace</p>
+        <h1 className="mt-2 text-2xl font-semibold text-slate-900">{title}</h1>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">{description}</p>
+      </div>
+    </section>
+  );
+}
+
+function AppLayout() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <Sidebar activePath={location.pathname} onNavigate={navigate} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <main className="app-main min-h-screen lg:ml-[260px]">
+        <button type="button" onClick={() => setSidebarOpen(true)} className="fixed left-4 top-4 z-30 rounded-md border border-slate-200 bg-white p-2 text-slate-600 shadow-sm lg:hidden" aria-label="Open navigation">
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+        <Routes>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/revenue-risk" element={<RevenueRisk />} />
+          <Route path="/transactions" element={<TransactionExplorer />} />
+          <Route path="/recovery-cases" element={<RecoveryCases />} />
+          <Route path="/recovery-cases/:caseId" element={<RecoveryCaseDetail />} />
+          <Route path="/agent-activity" element={<AgentActivity />} />
+          <Route path="/human-review" element={<HumanReview />} />
+          <Route path="/measured-recovery" element={<MeasuredRecovery />} />
+          <Route path="/analytics" element={<MeasuredRecovery />} />
+          <Route path="/audit-ledger" element={<AuditLedger />} />
+          <Route path="/simulator" element={<DemoSimulator />} />
+          <Route path="/architecture" element={<SystemArchitecture />} />
+          <Route path="/agent-config" element={<AgentConfiguration />} />
+          <Route path="/policies" element={<PoliciesSafety />} />
+          <Route path="/settings" element={<SettingsRazorpay />} />
+          <Route path="*" element={<DashboardPage />} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppLayout />
+    </BrowserRouter>
   );
 }

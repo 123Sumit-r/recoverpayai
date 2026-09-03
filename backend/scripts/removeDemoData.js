@@ -27,12 +27,6 @@ const pool = require('../config/database');
     );
     const demoIds = demoCustomers.rows.map(r => r.id);
 
-    if (demoIds.length === 0) {
-      console.log('No demo data found. Database is clean.');
-      await client.query('ROLLBACK');
-      return;
-    }
-
     console.log(`Found ${demoIds.length} demo customers to remove.`);
 
     // 2. Delete audit logs for recovery cases linked to demo data
@@ -42,8 +36,9 @@ const pool = require('../config/database');
       LEFT JOIN invoices i ON rc.invoice_id = i.id
       LEFT JOIN checkout_events ce ON rc.checkout_event_id = ce.id
       WHERE t.customer_id = ANY($1::int[])
-         OR i.customer_id = ANY($1::int[])
-         OR ce.customer_id = ANY($1::int[])
+        OR i.customer_id = ANY($1::int[])
+        OR ce.customer_id = ANY($1::int[])
+        OR ce.session_id LIKE 'demo-%'
     `, [demoIds]);
     const demoCaseIds = demoCases.rows.map(r => r.id);
 
@@ -62,10 +57,10 @@ const pool = require('../config/database');
     }
 
     // 3. Delete demo checkout events
-    const delCheckouts = await client.query(
-      `DELETE FROM checkout_events WHERE customer_id = ANY($1::int[]) OR session_id LIKE 'demo-%'`,
-      [demoIds]
-    );
+    const delCheckouts = await client.query(`
+      DELETE FROM checkout_events
+      WHERE customer_id = ANY($1::int[]) OR session_id LIKE 'demo-%'
+    `, [demoIds]);
     console.log(`Deleted ${delCheckouts.rowCount} demo checkout events.`);
 
     // 4. Delete demo invoices

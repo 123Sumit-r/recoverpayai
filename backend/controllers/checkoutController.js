@@ -23,10 +23,13 @@ async function startCheckout(request, response, next) {
   const abandonmentReason = request.body.abandonment_reason;
 
   if (!customerId && request.body.customer_email && request.body.customer_name) {
+    if (!request.body.customer_phone || !String(request.body.customer_phone).trim()) {
+      return response.status(400).json({ success: false, message: 'Provide customer_id or complete customer details including phone' });
+    }
     const cust = await customerModel.create({
       name: request.body.customer_name.trim(),
       email: request.body.customer_email.trim().toLowerCase(),
-      phone: request.body.customer_phone || '9999999999',
+      phone: request.body.customer_phone.trim(),
       customer_type: 'individual'
     });
     customerId = cust.id;

@@ -142,7 +142,7 @@ async function handleRazorpayPaymentWebhook(req, res, next) {
 
       // 6. Map Razorpay failure reason to standard codes
       const failureMapping = razorpayService.mapFailureReason(
-        paymentParsed.error,
+        `${paymentParsed.failureReason || ''} ${paymentParsed.error || ''}`.trim(),
         paymentParsed.method
       );
 

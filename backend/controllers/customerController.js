@@ -28,15 +28,15 @@ async function getCustomer(request, response, next) {
 
 async function createCustomer(request, response, next) {
   const { name, email, phone, customer_type } = request.body || {};
-  if (!name || !email || !email.includes('@')) {
-    return response.status(400).json({ success: false, message: 'Valid customer name and email are required.' });
+  if (!name || !email || !email.includes('@') || !phone || !phone.trim()) {
+    return response.status(400).json({ success: false, message: 'Valid customer name, email, and phone are required.' });
   }
 
   try {
     const customer = await customerModel.create({
       name: name.trim(),
       email: email.trim().toLowerCase(),
-      phone: phone ? phone.trim() : '9999999999',
+      phone: phone.trim(),
       customer_type: customer_type || 'individual'
     });
     response.status(201).json({ success: true, data: customer });

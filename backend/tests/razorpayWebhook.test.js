@@ -114,6 +114,12 @@ test('parses a payment.failed webhook event', () => {
   assert.equal(result.paymentId, 'pay_test_123');
 });
 
+test('maps Razorpay card-expired reasons to expired_card', () => {
+  const result = razorpayService.mapFailureReason('card_expired Payment failed', 'card');
+
+  assert.equal(result.reason, 'expired_card');
+});
+
 test('parses a nested Razorpay payment amount in rupees', () => {
   const result = razorpayService.parsePaymentWebhook(createNestedPayload());
 
