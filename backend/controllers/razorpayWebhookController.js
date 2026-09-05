@@ -35,7 +35,9 @@ const { sendRecoveryNotification } = require('../services/emailService');
  */
 async function handleRazorpayPaymentWebhook(req, res, next) {
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-  const signature = req.headers['x-razorpay-signature'];
+  const signature = typeof req.get === 'function'
+    ? req.get('x-razorpay-signature')
+    : req.headers['x-razorpay-signature'];
   const rawBody = req.rawBody || '';
 
   try {
@@ -47,19 +49,27 @@ async function handleRazorpayPaymentWebhook(req, res, next) {
       });
     }
 
+    if (!signature) {
+      console.error('Missing x-razorpay-signature header');
+      return res.status(400).json({
+        success: false,
+        error: 'Missing x-razorpay-signature header'
+      });
+    }
+
     const signatureVerification = razorpayService.verifyWebhookSignature(
       rawBody,
       signature,
       webhookSecret
     );
 
-      if (!signatureVerification.valid) {
-        console.error('Invalid webhook signature:', signatureVerification.error);
-        return res.status(401).json({
-          success: false,
-          error: 'Invalid webhook signature'
-        });
-      }
+    if (!signatureVerification.valid) {
+      console.error('Invalid webhook signature:', signatureVerification.error || 'signature mismatch');
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid webhook signature'
+      });
+    }
 
       // Parse webhook payload
       const eventData = JSON.parse(rawBody);
