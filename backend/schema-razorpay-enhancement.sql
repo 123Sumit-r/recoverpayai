@@ -69,6 +69,7 @@ CREATE INDEX IF NOT EXISTS recovery_cases_next_retry_at_idx ON recovery_cases(ne
 -- ============================================================
 -- CONSTRAINTS FOR DATA INTEGRITY
 -- ============================================================
--- Ensure payment_event_id is set when storing Razorpay data
+-- Ensure payment_event_id or transaction_id is set for failed payment cases
+ALTER TABLE recovery_cases DROP CONSTRAINT IF EXISTS recovery_cases_payment_event_required;
 ALTER TABLE recovery_cases ADD CONSTRAINT recovery_cases_payment_event_required
-  CHECK ((payment_event_id IS NOT NULL) OR (transaction_id IS NOT NULL));
+  CHECK (case_type <> 'failed_payment' OR (payment_event_id IS NOT NULL) OR (transaction_id IS NOT NULL));
