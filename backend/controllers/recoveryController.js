@@ -144,6 +144,5 @@ async function getRecoverySummary(request, response, next) {
   } catch (error) { next(error); }
 }
 
-module.exports = { getCases, getCase, createCase, analyzeCase, aiAnalyzeCase, executeCase, getRecoverySummary };
 module.exports = { getCases, getCase, createCase, analyzeCase, aiAnalyzeCase, executeCase, getRecoverySummary, getRevenuePerformance, getAuditLedger };
 
